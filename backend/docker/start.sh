@@ -5,6 +5,12 @@ set -e
 
 mkdir -p storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs bootstrap/cache
 
+if [ -n "${MYSQL_ATTR_SSL_CA_CONTENT:-}" ]; then
+    mkdir -p storage/certs
+    printf '%s' "$MYSQL_ATTR_SSL_CA_CONTENT" > storage/certs/aiven-ca.pem
+    export MYSQL_ATTR_SSL_CA=/app/storage/certs/aiven-ca.pem
+fi
+
 php artisan config:clear --no-interaction
 php artisan view:clear --no-interaction
 

@@ -112,6 +112,7 @@ DB_PORT=your-aiven-mysql-port
 DB_DATABASE=defaultdb
 DB_USERNAME=avnadmin
 DB_PASSWORD=your-aiven-password
+MYSQL_ATTR_SSL_CA_CONTENT=-----BEGIN CERTIFICATE-----...-----END CERTIFICATE-----
 
 SESSION_DRIVER=database
 CACHE_STORE=database
@@ -137,6 +138,8 @@ Kiểm tra API:
 ```text
 https://your-koyeb-domain.koyeb.app/api/tasks
 ```
+
+Với Aiven MySQL có `SSL mode = REQUIRED`, mở dòng `CA certificate`, copy toàn bộ certificate và đưa vào biến `MYSQL_ATTR_SSL_CA_CONTENT` trên Koyeb. Container sẽ tự ghi certificate vào file khi start.
 
 ## Scripts kiểm tra
 
