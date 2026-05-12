@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Daily Corner</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark">D</span>
+          <div>
+            <strong>Daily Corner</strong>
+            <small>Task, mood, photo</small>
+          </div>
+        </div>
+
+        <nav class="nav-tabs" aria-label="Điều hướng chính">
+          <button class="nav-tab active" data-view="today" type="button">Hôm nay</button>
+          <button class="nav-tab" data-view="week" type="button">Tuần này</button>
+          <button class="nav-tab" data-view="month" type="button">Tháng này</button>
+          <button class="nav-tab" data-view="mood" type="button">Mood</button>
+        </nav>
+
+        <section class="quick-card">
+          <p class="eyebrow">Tiến độ</p>
+          <div class="progress-ring" aria-label="Tiến độ hôm nay">
+            <span id="progressPercent">0%</span>
+          </div>
+          <p id="progressText">Chưa có việc nào hôm nay.</p>
+        </section>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow" id="todayLabel"></p>
+            <h1>Hôm nay của bạn</h1>
+          </div>
+          <button class="primary-action" id="openComposer" type="button">+ Thêm nhanh</button>
+        </header>
+
+        <section class="dashboard">
+          <div class="task-panel">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Công việc</p>
+                <h2 id="taskTitle">Danh sách hôm nay</h2>
+              </div>
+              <div class="filters" role="group" aria-label="Bộ lọc công việc">
+                <button class="filter-btn active" data-filter="all" type="button">Tất cả</button>
+                <button class="filter-btn" data-filter="open" type="button">Chưa xong</button>
+                <button class="filter-btn" data-filter="done" type="button">Đã xong</button>
+              </div>
+            </div>
+
+            <form class="task-form" id="taskForm">
+              <input id="taskName" maxlength="90" placeholder="Thêm việc cần làm..." required />
+              <select id="taskCategory" aria-label="Nhóm việc">
+                <option value="Học tập">Học tập</option>
+                <option value="Cá nhân">Cá nhân</option>
+                <option value="Sức khỏe">Sức khỏe</option>
+                <option value="Việc nhà">Việc nhà</option>
+                <option value="Dự án">Dự án</option>
+              </select>
+              <select id="taskPriority" aria-label="Mức ưu tiên">
+                <option value="normal">Bình thường</option>
+                <option value="high">Quan trọng</option>
+                <option value="low">Nhẹ nhàng</option>
+              </select>
+              <input id="taskDate" type="date" aria-label="Ngày làm" required />
+              <button type="submit">Thêm</button>
+            </form>
+
+            <div class="task-list" id="taskList" aria-live="polite"></div>
+          </div>
+
+          <aside class="mood-panel">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Mood hôm nay</p>
+                <h2>Ảnh & cảm xúc</h2>
+              </div>
+            </div>
+
+            <form class="mood-form" id="moodForm">
+              <label class="photo-picker" for="moodPhoto">
+                <input id="moodPhoto" type="file" accept="image/*" />
+                <img id="photoPreview" alt="" hidden />
+                <span id="photoPlaceholder">Chọn ảnh hôm nay</span>
+              </label>
+
+              <div class="mood-grid" role="radiogroup" aria-label="Cảm xúc hôm nay">
+                <label><input name="mood" type="radio" value="Vui" checked /> <span>Vui</span></label>
+                <label><input name="mood" type="radio" value="Mệt" /> <span>Mệt</span></label>
+                <label><input name="mood" type="radio" value="Buồn" /> <span>Buồn</span></label>
+                <label><input name="mood" type="radio" value="Chill" /> <span>Chill</span></label>
+              </div>
+
+              <textarea id="moodCaption" rows="4" maxlength="180" placeholder="Viết caption ngắn cho ngày hôm nay..."></textarea>
+              <button type="submit">Lưu mood</button>
+            </form>
+          </aside>
+        </section>
+
+        <section class="timeline-section">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Nhật ký</p>
+              <h2>Timeline gần đây</h2>
+            </div>
+            <button class="ghost-btn" id="clearDemo" type="button">Xóa dữ liệu</button>
+          </div>
+          <div class="timeline" id="timeline"></div>
+        </section>
+      </main>
+    </div>
+
+    <dialog class="quick-dialog" id="quickDialog">
+      <form method="dialog">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Thêm nhanh</p>
+            <h2>Bạn muốn thêm gì?</h2>
+          </div>
+          <button class="icon-btn" value="cancel" aria-label="Đóng" type="submit">x</button>
+        </div>
+        <div class="quick-actions">
+          <button id="focusTask" value="cancel" type="submit">Việc cần làm</button>
+          <button id="focusMood" value="cancel" type="submit">Mood & ảnh</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="app.js"></script>
+  </body>
+</html>
