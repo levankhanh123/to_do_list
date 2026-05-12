@@ -10,15 +10,19 @@ import {
   HeartPulse,
   ListChecks,
   Loader2,
+  LogOut,
+  Mail,
   Plus,
   Search,
   Sparkles,
   Trash2,
+  User,
 } from 'lucide-react'
 import './index.css'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api'
 const localKey = 'daily-corner-react-cache-v1'
+const tokenKey = 'daily-corner-api-token-v1'
 
 const tabs = [
   { id: 'today', label: 'Hôm nay', icon: ListChecks },
@@ -54,34 +58,65 @@ function App() {
   const [moodPosts, setMoodPosts] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [apiOnline, setApiOnline] = useState(true)
+  const [authToken, setAuthToken] = useState(() => localStorage.getItem(tokenKey) || '')
+  const [currentUser, setCurrentUser] = useState(null)
+  const [authMode, setAuthMode] = useState('login')
+  const [authError, setAuthError] = useState('')
+  const [authForm, setAuthForm] = useState({ name: '', email: '', password: '' })
   const [taskDraft, setTaskDraft] = useState({ title: '', category: 'Cá nhân', priority: 'normal', due_date: today })
   const [moodDraft, setMoodDraft] = useState({ mood: 'Vui', caption: '', image: '', entry_date: today })
   const [taskFilter, setTaskFilter] = useState('open')
   const [taskSearch, setTaskSearch] = useState('')
   const fileInputRef = useRef(null)
 
+  const apiHeaders = useCallback((extra = {}) => ({
+    Accept: 'application/json',
+    Authorization: `Bearer ${authToken}`,
+    ...extra,
+  }), [authToken])
+
+  const handleAuthExpired = useCallback(() => {
+    localStorage.removeItem(tokenKey)
+    setAuthToken('')
+    setCurrentUser(null)
+    setTasks([])
+    setMoodPosts([])
+    setAuthError('Phiên đăng nhập hết hạn. Đăng nhập lại để tiếp tục.')
+  }, [])
+
   const loadData = useCallback(async () => {
+    if (!authToken) {
+      setIsLoading(false)
+      return
+    }
+
     setIsLoading(true)
     try {
-      const [taskRes, moodRes] = await Promise.all([
-        fetch(`${API_BASE}/tasks`),
-        fetch(`${API_BASE}/moods`),
+      const [userRes, taskRes, moodRes] = await Promise.all([
+        fetch(`${API_BASE}/auth/me`, { headers: apiHeaders() }),
+        fetch(`${API_BASE}/tasks`, { headers: apiHeaders() }),
+        fetch(`${API_BASE}/moods`, { headers: apiHeaders() }),
       ])
-      if (!taskRes.ok || !moodRes.ok) throw new Error('API unavailable')
-      const [taskJson, moodJson] = await Promise.all([taskRes.json(), moodRes.json()])
+      if (userRes.status === 401) {
+        handleAuthExpired()
+        return
+      }
+      if (!userRes.ok || !taskRes.ok || !moodRes.ok) throw new Error('API unavailable')
+      const [userJson, taskJson, moodJson] = await Promise.all([userRes.json(), taskRes.json(), moodRes.json()])
+      setCurrentUser(userJson.data)
       setTasks(taskJson.data)
       setMoodPosts(moodJson.data)
-      persistLocal(taskJson.data, moodJson.data)
+      persistLocal(taskJson.data, moodJson.data, authToken)
       setApiOnline(true)
     } catch {
-      const cached = readLocal()
+      const cached = readLocal(authToken)
       setTasks(cached.tasks)
       setMoodPosts(cached.moods)
       setApiOnline(false)
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [apiHeaders, authToken, handleAuthExpired])
 
   useEffect(() => {
     const timer = window.setTimeout(loadData, 0)
@@ -100,6 +135,52 @@ function App() {
   const progress = todayTasks.length ? Math.round((doneToday / todayTasks.length) * 100) : 0
   const latestMood = moodPosts[0]
 
+  async function submitAuth(event) {
+    event.preventDefault()
+    setAuthError('')
+
+    try {
+      const payload = authMode === 'register' ? authForm : { email: authForm.email, password: authForm.password }
+      const res = await fetch(`${API_BASE}/auth/${authMode}`, {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const json = await res.json()
+
+      if (!res.ok) {
+        throw new Error(json.message || Object.values(json.errors || {})[0]?.[0] || 'Không đăng nhập được.')
+      }
+
+      localStorage.setItem(tokenKey, json.data.token)
+      setAuthToken(json.data.token)
+      setCurrentUser(json.data.user)
+      setAuthForm({ name: '', email: '', password: '' })
+      setApiOnline(true)
+    } catch (error) {
+      setAuthError(error.message)
+    }
+  }
+
+  async function logout() {
+    if (authToken) {
+      try {
+        await fetch(`${API_BASE}/auth/logout`, {
+          method: 'POST',
+          headers: apiHeaders(),
+        })
+      } catch {
+        // Logout locally even if the network is unavailable.
+      }
+    }
+
+    localStorage.removeItem(tokenKey)
+    setAuthToken('')
+    setCurrentUser(null)
+    setTasks([])
+    setMoodPosts([])
+  }
+
   async function createTask(event) {
     event.preventDefault()
     if (!taskDraft.title.trim()) return
@@ -107,19 +188,19 @@ function App() {
     const next = [optimistic, ...tasks]
     setTasks(next)
     setTaskDraft((draft) => ({ ...draft, title: '' }))
-    persistLocal(next, moodPosts)
+    persistLocal(next, moodPosts, authToken)
 
     if (!apiOnline) return
     try {
       const res = await fetch(`${API_BASE}/tasks`, {
         method: 'POST',
-        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        headers: apiHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(optimistic),
       })
       const json = await res.json()
       const synced = [json.data, ...tasks]
       setTasks(synced)
-      persistLocal(synced, moodPosts)
+      persistLocal(synced, moodPosts, authToken)
     } catch {
       setApiOnline(false)
     }
@@ -128,12 +209,12 @@ function App() {
   async function toggleTask(task) {
     const next = tasks.map((item) => item.id === task.id ? { ...item, done: !item.done } : item)
     setTasks(next)
-    persistLocal(next, moodPosts)
+    persistLocal(next, moodPosts, authToken)
     if (!apiOnline) return
     try {
       await fetch(`${API_BASE}/tasks/${task.id}`, {
         method: 'PATCH',
-        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        headers: apiHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ done: !task.done }),
       })
     } catch {
@@ -144,10 +225,10 @@ function App() {
   async function deleteTask(taskId) {
     const next = tasks.filter((task) => task.id !== taskId)
     setTasks(next)
-    persistLocal(next, moodPosts)
+    persistLocal(next, moodPosts, authToken)
     if (!apiOnline) return
     try {
-      await fetch(`${API_BASE}/tasks/${taskId}`, { method: 'DELETE' })
+      await fetch(`${API_BASE}/tasks/${taskId}`, { method: 'DELETE', headers: apiHeaders() })
     } catch {
       setApiOnline(false)
     }
@@ -160,19 +241,19 @@ function App() {
     setMoodPosts(next)
     setMoodDraft((draft) => ({ ...draft, caption: '', image: '' }))
     if (fileInputRef.current) fileInputRef.current.value = ''
-    persistLocal(tasks, next)
+    persistLocal(tasks, next, authToken)
 
     if (!apiOnline) return
     try {
       const res = await fetch(`${API_BASE}/moods`, {
         method: 'POST',
-        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        headers: apiHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(optimistic),
       })
       const json = await res.json()
       const synced = [json.data, ...moodPosts]
       setMoodPosts(synced)
-      persistLocal(tasks, synced)
+      persistLocal(tasks, synced, authToken)
     } catch {
       setApiOnline(false)
     }
@@ -181,10 +262,10 @@ function App() {
   async function deleteMood(moodId) {
     const next = moodPosts.filter((post) => post.id !== moodId)
     setMoodPosts(next)
-    persistLocal(tasks, next)
+    persistLocal(tasks, next, authToken)
     if (!apiOnline) return
     try {
-      await fetch(`${API_BASE}/moods/${moodId}`, { method: 'DELETE' })
+      await fetch(`${API_BASE}/moods/${moodId}`, { method: 'DELETE', headers: apiHeaders() })
     } catch {
       setApiOnline(false)
     }
@@ -197,6 +278,19 @@ function App() {
     reader.readAsDataURL(file)
   }
 
+  if (!authToken) {
+    return (
+      <AuthScreen
+        authMode={authMode}
+        setAuthMode={setAuthMode}
+        authForm={authForm}
+        setAuthForm={setAuthForm}
+        authError={authError}
+        submitAuth={submitAuth}
+      />
+    )
+  }
+
   return (
     <main className="min-h-screen p-3 text-slate-950 sm:p-4 lg:p-6">
       <div className="mx-auto grid max-w-6xl gap-4 lg:grid-cols-[224px_minmax(0,1fr)]">
@@ -205,9 +299,9 @@ function App() {
             <div className="grid size-11 place-items-center rounded-2xl bg-slate-950 text-white">
               <Sparkles size={22} />
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-sm font-black">Daily Corner</p>
-              <p className="text-xs font-semibold text-slate-500">Task & mood</p>
+              <p className="truncate text-xs font-semibold text-slate-500">{currentUser?.name || 'Task & mood'}</p>
             </div>
           </div>
 
@@ -236,6 +330,9 @@ function App() {
             <p className={`mt-1 text-sm font-black ${apiOnline ? 'text-emerald-700' : 'text-amber-700'}`}>
               {apiOnline ? 'Đang lưu API' : 'Đang lưu máy'}
             </p>
+            <button type="button" onClick={logout} className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-slate-950 text-xs font-black text-white">
+              <LogOut size={15} /> Đăng xuất
+            </button>
           </div>
         </aside>
 
@@ -274,6 +371,97 @@ function App() {
           </section>
         </section>
       </div>
+    </main>
+  )
+}
+
+function AuthScreen({ authMode, setAuthMode, authForm, setAuthForm, authError, submitAuth }) {
+  const isRegister = authMode === 'register'
+
+  return (
+    <main className="grid min-h-screen place-items-center p-4 text-slate-950">
+      <section className="glass grid w-full max-w-5xl overflow-hidden rounded-[34px] lg:grid-cols-[0.9fr_1.1fr]">
+        <div className="bg-slate-950 p-6 text-white sm:p-8">
+          <div className="grid size-12 place-items-center rounded-2xl bg-white text-slate-950">
+            <Sparkles size={24} />
+          </div>
+          <h1 className="mt-8 text-4xl font-black tracking-normal sm:text-5xl">Daily Corner</h1>
+          <p className="mt-4 max-w-sm text-base font-semibold leading-7 text-white/65">
+            Đăng nhập để task, mood và timeline chỉ thuộc về tài khoản của bạn.
+          </p>
+          <div className="mt-8 grid gap-3 text-sm font-bold text-white/75">
+            <p className="rounded-2xl bg-white/10 p-4">Dữ liệu tách riêng theo user</p>
+            <p className="rounded-2xl bg-white/10 p-4">API token bảo vệ task và mood</p>
+            <p className="rounded-2xl bg-white/10 p-4">Sẵn sàng deploy public</p>
+          </div>
+        </div>
+
+        <form onSubmit={submitAuth} className="p-6 sm:p-8">
+          <p className="text-xs font-black uppercase text-slate-400">{isRegister ? 'Tạo tài khoản' : 'Đăng nhập'}</p>
+          <h2 className="mt-2 text-3xl font-black tracking-normal text-slate-950">
+            {isRegister ? 'Bắt đầu không gian riêng' : 'Quay lại không gian của bạn'}
+          </h2>
+
+          {authError && (
+            <div className="mt-5 rounded-2xl bg-rose-50 p-4 text-sm font-bold text-rose-700">
+              {authError}
+            </div>
+          )}
+
+          <div className="mt-6 grid gap-3">
+            {isRegister && (
+              <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4">
+                <User size={18} className="text-slate-400" />
+                <input
+                  className="h-12 flex-1 outline-none"
+                  placeholder="Tên của bạn"
+                  value={authForm.name}
+                  onChange={(event) => setAuthForm({ ...authForm, name: event.target.value })}
+                  required
+                />
+              </label>
+            )}
+            <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4">
+              <Mail size={18} className="text-slate-400" />
+              <input
+                className="h-12 flex-1 outline-none"
+                placeholder="Email"
+                type="email"
+                value={authForm.email}
+                onChange={(event) => setAuthForm({ ...authForm, email: event.target.value })}
+                required
+              />
+            </label>
+            <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4">
+              <Sparkles size={18} className="text-slate-400" />
+              <input
+                className="h-12 flex-1 outline-none"
+                placeholder="Mật khẩu"
+                type="password"
+                minLength={6}
+                value={authForm.password}
+                onChange={(event) => setAuthForm({ ...authForm, password: event.target.value })}
+                required
+              />
+            </label>
+          </div>
+
+          <button className="mt-5 h-12 w-full rounded-2xl bg-slate-950 font-black text-white" type="submit">
+            {isRegister ? 'Đăng ký' : 'Đăng nhập'}
+          </button>
+
+          <button
+            className="mt-4 w-full text-sm font-black text-slate-500"
+            type="button"
+            onClick={() => {
+              setAuthMode(isRegister ? 'login' : 'register')
+              setAuthForm({ name: '', email: '', password: '' })
+            }}
+          >
+            {isRegister ? 'Đã có tài khoản? Đăng nhập' : 'Chưa có tài khoản? Đăng ký'}
+          </button>
+        </form>
+      </section>
     </main>
   )
 }
@@ -578,18 +766,22 @@ function EmptyState({ text }) {
   return <div className="rounded-3xl border border-dashed border-slate-300 bg-white/50 p-6 text-center font-bold text-slate-500">{text}</div>
 }
 
-function persistLocal(tasks, moods) {
-  localStorage.setItem(localKey, JSON.stringify({ tasks, moods }))
+function persistLocal(tasks, moods, token) {
+  localStorage.setItem(scopedLocalKey(token), JSON.stringify({ tasks, moods }))
 }
 
-function readLocal() {
-  const cached = localStorage.getItem(localKey)
+function readLocal(token) {
+  const cached = localStorage.getItem(scopedLocalKey(token))
   if (!cached) return starterData
   try {
     return JSON.parse(cached)
   } catch {
     return starterData
   }
+}
+
+function scopedLocalKey(token) {
+  return `${localKey}:${token ? token.slice(0, 12) : 'guest'}`
 }
 
 function toLocalISO(date) {

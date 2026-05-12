@@ -6,22 +6,25 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class MoodPost extends Model
+class ApiToken extends Model
 {
     use HasUuids;
 
     protected $fillable = [
         'user_id',
-        'mood',
-        'caption',
-        'image',
-        'entry_date',
+        'name',
+        'token_hash',
+        'last_used_at',
+    ];
+
+    protected $hidden = [
+        'token_hash',
     ];
 
     protected function casts(): array
     {
         return [
-            'entry_date' => 'date:Y-m-d',
+            'last_used_at' => 'datetime',
         ];
     }
 
