@@ -80,6 +80,64 @@ Luồng deploy gọn:
 
 Với bản public thật, nên set CORS theo domain frontend thay vì `*`.
 
+## Deploy Backend Lên Koyeb
+
+Repository này đã có Dockerfile cho Laravel ở `backend/Dockerfile`.
+
+Trước khi deploy backend, trong Aiven bạn cần tạo **MySQL service**, không phải Kafka. Service trong ảnh hiện tại là Kafka nên chưa dùng được cho Laravel.
+
+Trên Koyeb:
+
+1. Create Web Service.
+2. Chọn GitHub repository `levankhanh123/to_do_list`.
+3. Chọn branch `main`.
+4. Work directory: `backend`.
+5. Builder: Dockerfile.
+6. Dockerfile path: `Dockerfile`.
+7. Exposed port: `8000`, protocol HTTP.
+8. Thêm environment variables:
+
+```text
+APP_NAME=Daily Corner
+APP_ENV=production
+APP_KEY=base64:your-generated-key
+APP_DEBUG=false
+APP_URL=https://your-koyeb-domain.koyeb.app
+APP_LOCALE=vi
+APP_FALLBACK_LOCALE=en
+
+DB_CONNECTION=mysql
+DB_HOST=your-aiven-mysql-host
+DB_PORT=your-aiven-mysql-port
+DB_DATABASE=defaultdb
+DB_USERNAME=avnadmin
+DB_PASSWORD=your-aiven-password
+
+SESSION_DRIVER=database
+CACHE_STORE=database
+QUEUE_CONNECTION=database
+RUN_MIGRATIONS=true
+```
+
+Tạo `APP_KEY` bằng lệnh local:
+
+```bash
+cd backend
+php artisan key:generate --show
+```
+
+Sau khi Koyeb deploy xong, backend URL sẽ có dạng:
+
+```text
+https://your-koyeb-domain.koyeb.app
+```
+
+Kiểm tra API:
+
+```text
+https://your-koyeb-domain.koyeb.app/api/tasks
+```
+
 ## Scripts kiểm tra
 
 ```bash
